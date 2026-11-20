@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Rescue – logic tests</title>
+  <style>
+    body { background: #121212; color: #F2F2F2; font-family: system-ui, sans-serif; padding: 2rem; line-height: 1.5; }
+    h1 { margin-top: 0; }
+    .pass { color: #6FBF8A; }
+    .fail { color: #E0806F; font-weight: 700; }
+    #summary { font-size: 1.4rem; font-weight: 700; margin-bottom: 1rem; }
+    li { margin: 0.2rem 0; }
+    code { color: #D6A84B; }
+  </style>
+</head>
+<body>
+  <h1>Rescue – automatic logic tests</h1>
+  <p>Open this file in a browser. Every line should be green. These tests check the game rules in
+     <code>js/game.js</code>, the quiz format in <code>js/quiz.js</code> and that both translation files have the same texts.</p>
+  <p id="summary">Running…</p>
+  <ul id="results"></ul>
+
+  <script src="lang/cs.js"></script>
+  <script src="lang/en.js"></script>
+  <script src="js/quiz.js"></script>
+  <script src="js/game.js"></script>
+  <script>
+    const results = [];
+
+    function test(name, fn) {
+      try {
+        fn();
+        results.push({ name, ok: true });
+      } catch (error) {
+        results.push({ name, ok: false, message: error.message });
+      }
+    }
+
+    function assertEqual(actual, expected, label) {
+      const a = JSON.stringify(actual);
+      const e = JSON.stringify(expected);
+      if (a !== e) throw new Error((label || 'value') + ': expected ' + e + ' but got ' + a);
+    }
+
+    function assert(condition, label) {
+      if (!condition) throw new Error(label || 'assertion failed');
+    }
+
+    // A complete quiz for testing.
+    function makeQuiz() {
+      const quiz = Quiz.createEmpty('en');
+      quiz.title = 'Test quiz';
+      quiz.categories.forEach((category, c) => {
+        category.name = 'Category ' + c;
+        category.questions.forEach((q, r) => {
+          q.question = 'Q ' + c + '-' + r;
+          q.answer = 'A ' + c + '-' + r;
+        });
+      });
+      return quiz;
+    }
+
+    // A "random" function that always gives the same results, so the drawn order is predictable.
+    function fixedRandom(values) {
+      let i = 0;
+      return () => values[i++ % values.length];
+    }
+
+    // Opens, reveals and evaluates one question.
+    function play(state, cat, row, correct) {
+      assert(Game.openQuestion(state, cat, row), 'question ' + cat + '-' + row + ' should open');
+      assert(Game.revealAnswer(state), 'answer should be revealed');
+      return Game.evaluateAnswer(state, correct);
+    }
+
+    // ---------- Quiz format ----------
+
+    test('Points come from the row: 100 to 500', () => {
+      assertEqual([0, 1, 2, 3, 4].map(Quiz.pointsForRow), [100, 200, 300, 400, 500]);
+    });
+
+    test('An empty quiz has 5 categories with 5 questions', () => {
+      const quiz = Quiz.createEmpty();
+      assertEqual(quiz.categories.length, 5);
+      assert(quiz.categories.every(c => c.questions.length === 5));
+    });
+
+    test('Missing fields are found (title, category names, questions, answers – but not notes)', () => {
+      assertEqual(Quiz.findMissingFields(Quiz.createEmpty()).length, 1 + 5 + 25 + 25);
+      assertEqual(Quiz.findMissingFields(makeQuiz()).length, 0);
+      assert(Quiz.isComplete(makeQuiz()));
+    });
+
+    test('Whitespace-only text counts as missing', () => {
+      const quiz = makeQuiz();
+      quiz.categories[2].questions[3].answer = '   ';
+      assertEqual(Quiz.findMissingFields(quiz), [{ field: 'answer', cat: 2, row: 3 }]);
+    });
+
+    test('Clone is independent of the original', () => {
+      const quiz = makeQuiz();
+      const copy = Quiz.clone(quiz);
+      copy.categories[0].questions[0].question = 'changed';
+      assertEqual(quiz.categories[0].questions[0].question, 'Q 0-0');
+    });
+
+    test('Moving questions swaps them (and so their point values)', () => {
+      const quiz = makeQuiz();
+      Quiz.swapQuestions(quiz, 1, 0, 1);
+      assertEqual(quiz.categories[1].questions[0].question, 'Q 1-1');
+      assertEqual(quiz.categories[1].questions[1].question, 'Q 1-0');
+      assert(!Quiz.swapQuestions(quiz, 1, 4, 5), 'cannot move past the last row');
+    });
+
+    test('Moving categories swaps them', () => {
+      const quiz = makeQuiz();
+      Quiz.swapCategories(quiz, 0, 1);
+      assertEqual(quiz.categories[0].name, 'Category 1');
+      assert(!Quiz.swapCategories(quiz, 0, -1), 'cannot move before the first category');
+    });
+
+    // ---------- Export / import ----------
+
+    test('Export and import gives back the same content with a new id', () => {
+      const quiz = makeQuiz();
+      quiz.categories[0].questions[0].note = 'Note with "quotes" and čeština';
+      const result = Quiz.parseImport(Quiz.toExportText(quiz));
+      assert(result.quiz, 'import should succeed');
+      assertEqual(result.quiz.categories, quiz.categories);
+      assertEqual(result.quiz.title, quiz.title);
+      assert(result.quiz.id !== quiz.id, 'imported quiz gets a new id');
+    });
+
+    test('Import rejects text that is not JSON', () => {
+      assertEqual(Quiz.parseImport('hello').error, 'import.errorNotJson');
+    });
+
+    test('Import rejects JSON that is not a Rescue quiz', () => {
+      assertEqual(Quiz.parseImport('{"name":"x"}').error, 'import.errorWrongFormat');
+      assertEqual(Quiz.parseImport('[1,2,3]').error, 'import.errorWrongFormat');
+    });
+
+    test('Import rejects files from a newer version', () => {
+      assertEqual(Quiz.parseImport('{"format":"rescue-quiz","formatVersion":99,"quiz":{}}').error, 'import.errorNewerVersion');
+    });
+
+    test('Import rejects a quiz with the wrong structure', () => {
+      const file = JSON.parse(Quiz.toExportText(makeQuiz()));
+      file.quiz.categories.pop();
+      assertEqual(Quiz.parseImport(JSON.stringify(file)).error, 'import.errorStructure');
+    });
+
+    test('Import accepts an incomplete quiz (it can be finished in the editor)', () => {
+      const result = Quiz.parseImport(Quiz.toExportText(Quiz.createEmpty()));
+      assert(result.quiz && !Quiz.isComplete(result.quiz));
+    });
+
+    test('Export file name is safe', () => {
+      const quiz = makeQuiz();
+      quiz.title = 'Klima & Energie: Příliš žluťoučký kůň!';
+      assertEqual(Quiz.exportFileName(quiz), 'rescue-klima-energie-prilis-zlutoucky-kun.json');
+    });
+
+    // ---------- Starting a game ----------
+
+    test('A new game starts with 0 points, no used questions and the first team in the drawn order', () => {
+      const state = Game.createGame(makeQuiz(), ['A', 'B', 'C']);
+      assertEqual(state.teams.map(t => t.score), [0, 0, 0]);
+      assertEqual(state.usedQuestions, []);
+      assertEqual(state.status, 'playing');
+      assertEqual(Game.currentTeamIndex(state), state.turnOrder[0]);
+    });
+
+    test('The drawn order contains every team exactly once', () => {
+      for (let n = 2; n <= 8; n++) {
+        const order = Game.randomOrder(n);
+        assertEqual([...order].sort((a, b) => a - b), Array.from({ length: n }, (_, i) => i), n + ' teams');
+      }
+    });
+
+    test('The order really is random (not always the same)', () => {
+      const seen = new Set();
+      for (let i = 0; i < 200; i++) seen.add(Game.randomOrder(4).join(','));
+      assert(seen.size > 10, 'only ' + seen.size + ' different orders in 200 draws');
+    });
+
+    test('Fewer than 2 or more than 8 teams is refused', () => {
+      let failed = 0;
+      try { Game.createGame(makeQuiz(), ['A']); } catch (e) { failed++; }
+      try { Game.createGame(makeQuiz(), ['1', '2', '3', '4', '5', '6', '7', '8', '9']); } catch (e) { failed++; }
+      assertEqual(failed, 2);
+    });
+
+    test('The game uses its own copy of the quiz (editing the quiz does not change the game)', () => {
+      const quiz = makeQuiz();
+      const state = Game.createGame(quiz, ['A', 'B']);
+      quiz.categories[0].questions[0].question = 'edited later';
+      assertEqual(state.quiz.categories[0].questions[0].question, 'Q 0-0');
+    });
+
+    // ---------- Scoring ----------
+
+    test('Correct answer adds points, incorrect subtracts them', () => {
+      const state = Game.createGame(makeQuiz(), ['A', 'B'], fixedRandom([0]));
+      const first = Game.currentTeamIndex(state);
+      play(state, 0, 2, true);   // +300
+      const second = Game.currentTeamIndex(state);
+      play(state, 0, 3, false);  // -400
+      assertEqual(state.teams[first].score, 300);
+      assertEqual(state.teams[second].score, -400);
+    });
+
+    test('Scores can become negative and keep going down', () => {
+      const state = Game.createGame(makeQuiz(), ['A', 'B']);
+      const team = Game.currentTeamIndex(state);
+      play(state, 0, 0, false);  // team −100
+      play(state, 1, 0, true);   // other team
+      play(state, 0, 4, false);  // team −500
+      assertEqual(state.teams[team].score, -600);
+    });
+
+    test('Several correct answers in a row add up', () => {
+      const state = Game.createGame(makeQuiz(), ['A', 'B']);
+      const team = Game.currentTeamIndex(state);
+      play(state, 0, 0, true);   // team +100
+      play(state, 1, 0, false);  // other
+      play(state, 0, 1, true);   // team +200
+      play(state, 1, 1, false);  // other
+      play(state, 0, 2, true);   // team +300
+      assertEqual(state.teams[team].score, 600);
+    });
+
+    test('The answer must be shown before evaluating', () => {
+      const state = Game.createGame(makeQuiz(), ['A', 'B']);
+      Game.openQuestion(state, 0, 0);
+      assertEqual(Game.evaluateAnswer(state, true), null);
+      assertEqual(state.teams.map(t => t.score), [0, 0]);
+    });
+
+    test('Evaluating twice (double click) only counts once', () => {
+      const state = Game.createGame(makeQuiz(), ['A', 'B']);
+      const team = Game.currentTeamIndex(state);
+      play(state, 0, 0, true);
+      assertEqual(Game.evaluateAnswer(state, true), null);
+      assertEqual(state.teams[team].score, 100);
+      assertEqual(state.turnIndex, 1);
+    });
+
+    test('A used question cannot be opened again', () => {
+      const state = Game.createGame(makeQuiz(), ['A', 'B']);
+      play(state, 2, 2, true);
+      assert(!Game.openQuestion(state, 2, 2));
+      assert(Game.isQuestionUsed(state, 2, 2));
+    });
+
+    test('Only one question can be open at a time', () => {
+      const state = Game.createGame(makeQuiz(), ['A', 'B']);
+      assert(Game.openQuestion(state, 0, 0));
+      assert(!Game.openQuestion(state, 1, 1));
+    });
+
+    test('"Back to board" changes nothing: no points, same team, question still free', () => {
+      const state = Game.createGame(makeQuiz(), ['A', 'B']);
+      const team = Game.currentTeamIndex(state);
+      Game.openQuestion(state, 0, 0);
+      Game.revealAnswer(state);
+      Game.closeQuestion(state);
+      assertEqual(state.teams.map(t => t.score), [0, 0]);
+      assertEqual(Game.currentTeamIndex(state), team);
+      assert(!Game.isQuestionUsed(state, 0, 0));
+      assert(Game.openQuestion(state, 0, 0));
+    });
+
+    test('Manual score correction changes only the score, not the turn', () => {
+      const state = Game.createGame(makeQuiz(), ['A', 'B', 'C']);
+      const team = Game.currentTeamIndex(state);
+      assert(Game.setScore(state, 1, 750));
+      assertEqual(state.teams[1].score, 750);
+      assertEqual(Game.currentTeamIndex(state), team);
+      assert(!Game.setScore(state, 1, 1.5), 'decimals refused');
+      assert(!Game.setScore(state, 1, NaN), 'NaN refused');
+      assert(Game.setScore(state, 1, -200), 'negative allowed');
+    });
+
+    // ---------- Turn order ----------
+
+    test('Teams play in the drawn order and the order repeats', () => {
+      const state = Game.createGame(makeQuiz(), ['A', 'B', 'C', 'D']);
+      const order = [...state.turnOrder];
+      const played = [];
+      for (let i = 0; i < 9; i++) {
+        played.push(Game.currentTeamIndex(state));
+        play(state, Math.floor(i / 5), i % 5, i % 2 === 0);
+      }
+      assertEqual(played, [...order, ...order, order[0]]);
+      assertEqual(state.turnOrder, order, 'order never changes');
+    });
+
+    test('Turn moves on after an incorrect answer too', () => {
+      const state = Game.createGame(makeQuiz(), ['A', 'B']);
+      const first = Game.currentTeamIndex(state);
+      play(state, 0, 0, false);
+      assert(Game.currentTeamIndex(state) !== first);
+    });
+
+    // ---------- Game end and ranking ----------
+
+    test('The game finishes automatically after all 25 questions', () => {
+      const state = Game.createGame(makeQuiz(), ['A', 'B', 'C']);
+      for (let c = 0; c < 5; c++) {
+        for (let r = 0; r < 5; r++) {
+          assertEqual(state.status, 'playing');
+          play(state, c, r, true);
+        }
+      }
+      assertEqual(state.status, 'finished');
+      assertEqual(state.usedQuestions.length, 25);
+      const total = state.teams.reduce((sum, t) => sum + t.score, 0);
+      assertEqual(total, 5 * (100 + 200 + 300 + 400 + 500));
+    });
+
+    test('Ending early finishes the game and closes an open question', () => {
+      const state = Game.createGame(makeQuiz(), ['A', 'B']);
+      Game.openQuestion(state, 0, 0);
+      Game.finishGame(state);
+      assertEqual(state.status, 'finished');
+      assertEqual(state.openQuestion, null);
+      assert(!Game.openQuestion(state, 1, 1), 'no questions after the end');
+    });
+
+    test('Ranking is sorted by score with differences to the winner', () => {
+      const state = Game.createGame(makeQuiz(), ['A', 'B', 'C']);
+      state.teams[0].score = 300;
+      state.teams[1].score = 900;
+      state.teams[2].score = -100;
+      const ranking = Game.getRanking(state);
+      assertEqual(ranking.rows.map(r => r.name), ['B', 'A', 'C']);
+      assertEqual(ranking.rows.map(r => r.rank), [1, 2, 3]);
+      assertEqual(ranking.rows.map(r => r.behind), [0, 600, 1000]);
+      assertEqual(ranking.winners, [1]);
+      assertEqual(ranking.isTie, false);
+    });
+
+    test('A tie for first place is reported as a tie, not one random winner', () => {
+      const state = Game.createGame(makeQuiz(), ['A', 'B', 'C', 'D']);
+      state.teams[0].score = 500;
+      state.teams[1].score = 500;
+      state.teams[2].score = 200;
+      state.teams[3].score = 200;
+      const ranking = Game.getRanking(state);
+      assertEqual(ranking.isTie, true);
+      assertEqual(ranking.winners.sort(), [0, 1]);
+      assertEqual(ranking.rows.map(r => r.rank), [1, 1, 3, 3]);
+    });
+
+    test('Nobody is "leading" while all scores are equal', () => {
+      const state = Game.createGame(makeQuiz(), ['A', 'B', 'C']);
+      assertEqual(Game.leadingTeams(state), []);
+      state.teams[2].score = 100;
+      assertEqual(Game.leadingTeams(state), [2]);
+      state.teams[0].score = 100;
+      assertEqual(Game.leadingTeams(state), [0, 2]);
+    });
+
+    // ---------- Saving and restoring ----------
+
+    test('A saved game is restored exactly (order, scores, used questions, open question)', () => {
+      const state = Game.createGame(makeQuiz(), ['A', 'B', 'C']);
+      play(state, 0, 0, true);
+      play(state, 3, 4, false);
+      Game.openQuestion(state, 2, 1);
+      Game.revealAnswer(state);
+      const restored = Game.validateState(JSON.parse(JSON.stringify(state)));
+      assert(restored, 'state should be valid');
+      assertEqual(restored.turnOrder, state.turnOrder);
+      assertEqual(restored.teams, state.teams);
+      assertEqual(restored.turnIndex, state.turnIndex);
+      assertEqual(restored.usedQuestions, state.usedQuestions);
+      assertEqual(restored.openQuestion, { cat: 2, row: 1, answerRevealed: true });
+      assertEqual(Game.currentTeamIndex(restored), Game.currentTeamIndex(state));
+    });
+
+    test('Damaged saved games are rejected instead of crashing', () => {
+      const good = Game.createGame(makeQuiz(), ['A', 'B']);
+      const broken = [
+        null, 42, {}, { ...good, version: 2 },
+        { ...good, turnOrder: [0, 0] },
+        { ...good, teams: [{ name: 'A', score: 'x' }, { name: 'B', score: 0 }] },
+        { ...good, usedQuestions: [{ cat: 9, row: 0, team: 0 }] },
+        { ...good, quiz: { categories: [] } },
+        { ...good, status: 'weird' }
+      ];
+      broken.forEach((data, i) => assertEqual(Game.validateState(data), null, 'case ' + i));
+    });
+
+    // ---------- Translations ----------
+
+    test('Czech and English have exactly the same translation keys', () => {
+      const cs = Object.keys(TRANSLATIONS.cs.strings).sort();
+      const en = Object.keys(TRANSLATIONS.en.strings).sort();
+      const onlyCs = cs.filter(k => !en.includes(k));
+      const onlyEn = en.filter(k => !cs.includes(k));
+      assert(onlyCs.length === 0 && onlyEn.length === 0,
+        'only in cs: ' + onlyCs.join(', ') + ' | only in en: ' + onlyEn.join(', '));
+    });
+
+    test('No translation is empty', () => {
+      for (const lang of ['cs', 'en']) {
+        const empty = Object.entries(TRANSLATIONS[lang].strings).filter(([, v]) => !v.trim()).map(([k]) => k);
+        assertEqual(empty, [], lang);
+      }
+    });
+
+    // ---------- Show results ----------
+
+    const failed = results.filter(r => !r.ok);
+    const summary = document.getElementById('summary');
+    summary.textContent = failed.length === 0
+      ? 'All ' + results.length + ' tests passed.'
+      : failed.length + ' of ' + results.length + ' tests FAILED.';
+    summary.className = failed.length === 0 ? 'pass' : 'fail';
+    document.getElementById('results').append(...results.map(r => {
+      const li = document.createElement('li');
+      li.className = r.ok ? 'pass' : 'fail';
+      li.textContent = (r.ok ? '✓ ' : '✗ ') + r.name + (r.ok ? '' : ' — ' + r.message);
+      return li;
+    }));
+    window.testResults = { total: results.length, failed: failed.map(f => f.name + ': ' + f.message) };
+  </script>
+</body>
+</html>
