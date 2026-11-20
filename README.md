@@ -8,8 +8,12 @@ It is made for schools, workshops and educational events. The first focus is env
 
 ## Quick start
 
-1. Download the project (on GitHub: **Code → Download ZIP**) and unzip it.
-2. Double-click **`index.html`**. It opens in your web browser.
+1. Download the project (on GitHub: the green **Code** button → **Download ZIP**).
+2. **Unzip it first:** right-click the ZIP file → **Extract All** (Windows) or double-click it (Mac).
+   Opening `index.html` directly inside the ZIP does not work, because the browser then gets only that one file without the `css`, `js`, `lang` and `data` folders.
+3. In the extracted folder, double-click **`index.html`**. It opens in your web browser.
+
+If you ever see the message "The app did not start", the files next to `index.html` are missing – repeat step 2.
 
 That is all. There is nothing to install, no server and no internet connection needed. A current version of Chrome, Edge, Firefox or Safari is recommended.
 
