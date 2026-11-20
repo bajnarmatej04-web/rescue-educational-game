@@ -253,15 +253,16 @@ const GameUI = (() => {
         if (used) {
           const teamName = game.teams[used.team].name;
           const change = used.correct ? used.points : -used.points;
+          // A played question is plain text, not a button, so it cannot be opened again.
           cells.push(el('div', {
             class: 'board-cell is-used ' + (used.correct ? 'was-correct' : 'was-incorrect'),
-            style: position,
-            'aria-label': t('game.cellUsedLabel', {
-              category: category.name, points, team: teamName, change: I18n.formatChange(change)
-            })
+            style: position
           },
-            el('span', { class: 'cell-points' }, I18n.formatNumber(points)),
-            el('span', { class: 'cell-result' }, teamName + ' ' + I18n.formatChange(change))));
+            el('span', { class: 'visually-hidden' }, t('game.cellUsedLabel', {
+              category: category.name, points, team: teamName, change: I18n.formatChange(change)
+            })),
+            el('span', { class: 'cell-points', 'aria-hidden': 'true' }, I18n.formatNumber(points)),
+            el('span', { class: 'cell-result', 'aria-hidden': 'true' }, teamName + ' ' + I18n.formatChange(change))));
         } else {
           cells.push(el('button', {
             type: 'button', class: 'board-cell', style: position,

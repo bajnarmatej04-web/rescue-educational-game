@@ -279,7 +279,7 @@ const EditorUI = (() => {
 
   // Marks an empty required field, but only after the user has tried to save.
   function markField(control, required) {
-    const missing = showMissing && required && control.value.trim() === '';
+    const missing = Boolean(showMissing && required && control.value.trim() === '');
     control.classList.toggle('is-missing', missing);
     if (missing) control.setAttribute('aria-invalid', 'true');
     else control.removeAttribute('aria-invalid');

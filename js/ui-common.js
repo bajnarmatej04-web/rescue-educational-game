@@ -74,12 +74,12 @@ const UI = (() => {
     const actions = el('div', { class: 'dialog-actions' },
       options.buttons.map(b => button(b.label, () => finishDialog(b.value), b.variant)));
 
-    dialog.append(
+    append(dialog, [
       el('h2', { id: titleId, class: 'dialog-title' }, options.title),
       options.message ? el('p', { class: 'dialog-message' }, options.message) : null,
       options.content || null,
       actions
-    );
+    ]);
 
     // Pressing Enter inside a text field confirms the dialog.
     if (options.enterValue !== undefined) {
@@ -169,6 +169,10 @@ const UI = (() => {
       const input = el('input', { type: 'file', accept, hidden: true });
       input.addEventListener('change', () => {
         resolve(input.files[0] || null);
+        input.remove();
+      });
+      input.addEventListener('cancel', () => {
+        resolve(null);
         input.remove();
       });
       document.body.appendChild(input);
