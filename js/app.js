@@ -147,6 +147,10 @@ const App = (() => {
     // A finished game stays saved until the results screen is closed.
     go(game && game.status === 'finished' ? 'results' : 'menu');
 
+    // The app started, so remove the "app did not start" message from index.html.
+    const startupProblem = document.getElementById('startup-problem');
+    if (startupProblem) startupProblem.remove();
+
     if (damaged) {
       await UI.alert({ title: t('storage.damagedGameTitle'), message: t('storage.damagedGameMessage') });
     }
