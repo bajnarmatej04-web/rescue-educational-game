@@ -4,7 +4,7 @@ Rescue is a bilingual (Czech / English) educational quiz game in the style of th
 
 It is made for schools, workshops and educational events. The first focus is environmental education, but you can create quizzes on any topic in the built-in editor.
 
-> **Quiz content:** the built-in quiz "Testovací kvíz (dočasný obsah)" is **temporary placeholder content** for testing. The real questions will be added later.
+> **Quiz content:** the built-in quiz "Riskuj – klima a společnost" (25 questions in Czech on oligarchy, the climate movement, climate policy, climate facts and estimates) is ready to play. Built-in quizzes are stored in `data/preset-quizzes.js`.
 
 ## Quick start
 
@@ -103,7 +103,7 @@ js/
 lang/
   cs.js, en.js        all interface texts (Czech is the default)
 data/
-  preset-quizzes.js   built-in quizzes (currently a placeholder)
+  preset-quizzes.js   built-in quizzes
 docs/
   architecture.md     how the parts work together, for future development
 ```
