@@ -147,6 +147,8 @@ const UI = (() => {
     const region = document.getElementById('toast-region');
     const item = el('div', { class: 'toast toast-' + (kind || 'info') }, message);
     region.appendChild(item);
+    // Keep at most 3 notifications on screen; drop the oldest.
+    while (region.children.length > 3) region.firstChild.remove();
     setTimeout(() => item.classList.add('toast-hide'), 3200);
     setTimeout(() => item.remove(), 3700);
   }

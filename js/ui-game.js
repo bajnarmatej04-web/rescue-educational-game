@@ -294,7 +294,13 @@ const GameUI = (() => {
       : [backButton,
         UI.button(t('game.revealAnswer'), reveal, 'primary')];
 
-    return el('section', { class: 'question-view', 'aria-label': t('game.questionRegion') },
+    // Long texts get a smaller font so the whole question, answer and buttons fit on one screen.
+    const classes = ['question-view'];
+    if (open.answerRevealed) classes.push('is-revealed');
+    if (question.question.length > 160) classes.push('has-long-question');
+    if (question.answer.length + question.note.length > 90) classes.push('has-long-answer');
+
+    return el('section', { class: classes.join(' '), 'aria-label': t('game.questionRegion') },
       el('div', { class: 'question-meta' },
         el('span', { class: 'question-category' }, game.quiz.categories[open.cat].name),
         el('span', { class: 'question-points' }, t('game.points', { points: pointsText }))),

@@ -121,6 +121,14 @@ button.board-cell:hover { background: #303030; border-color: var(--color-accent)
 .answer-text { font-size: clamp(1.4rem, 2.5vw, 2.6rem); font-weight: 700; line-height: 1.25; white-space: pre-line; overflow-wrap: anywhere; }
 .answer-note { margin-top: var(--space-3); font-size: clamp(1rem, 1.4vw, 1.4rem); color: var(--color-text-muted); white-space: pre-line; }
 
+/* Smaller text for long questions and answers, so everything fits without scrolling. */
+.question-view.has-long-question .question-text { font-size: clamp(1.4rem, 2.4vw, 2.6rem); }
+.question-view.is-revealed .question-text { flex: 0 0 auto; font-size: clamp(1.3rem, 2.1vw, 2.3rem); }
+.question-view.is-revealed.has-long-question .question-text { font-size: clamp(1.15rem, 1.7vw, 1.9rem); }
+.question-view.has-long-answer .answer-text { font-size: clamp(1.1rem, 1.7vw, 1.9rem); line-height: 1.35; }
+.question-view.is-revealed { gap: var(--space-4); padding: clamp(1rem, 2.2vw, 2.2rem); }
+.question-view.is-revealed .question-actions { margin-top: auto; }
+
 .question-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--space-3); }
 .question-actions .btn { min-height: 3.5rem; padding: var(--space-3) var(--space-6); font-size: clamp(1rem, 1.3vw, 1.3rem); }
 .question-actions .btn-ghost { margin-right: auto; }
